@@ -7,7 +7,7 @@ const characters = {
   Shadow: { color:'#ed334c', tagline:'CHAOS • Precision', special:'Chaos Control', speed:1.04, power:1.12, move:'Brief burst of speed and powerful strike' },
   Cream: { color:'#ffc86d', tagline:'TECHNIQUE • Teamwork', special:'Cheese Assist', speed:1, power:.92, move:'Cheese rushes forward for a ranged hit' }
 };
-const state = { screen:'home', room:null, playerId:crypto.randomUUID(), name:'Player', character:'Sonic', players:[], game:null, keys:{}, lastAction:0, polling:null, onlineInput:null, onlineBusy:false, previousOnlineKeys:{}, onlineRaf:0, visualPositions:{}, local:false };
+const state = { screen:'home', room:null, playerId:crypto.randomUUID(), name:'Player', character:'Sonic', players:[], game:null, keys:{}, lastAction:0, polling:null, onlineInput:null, onlineBusy:false, previousOnlineKeys:{}, onlineRaf:0, visualPositions:{}, local:false, lastFacingX:1, lastFacingY:0 };
 const app = document.querySelector('#app');
 const esc = s => String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function render(){
@@ -73,10 +73,13 @@ function startOnlineInput(){
     const dy=(k.s||k.S||k.ArrowDown?1:0)-(k.w||k.W||k.ArrowUp?1:0);
     const attack=(k.j||k.J)&&!state.previousOnlineKeys.attack;
     const special=(k.k||k.K)&&!state.previousOnlineKeys.special;
-    state.previousOnlineKeys={attack:!!(k.j||k.J),special:!!(k.k||k.K)};
-    if(dx===0 && dy===0 && !attack && !special) return;
+    const dodge=(k.shift||k.Shift)&&!state.previousOnlineKeys.dodge;
+    state.previousOnlineKeys={attack:!!(k.j||k.J),special:!!(k.k||k.K),dodge:!!(k.shift||k.Shift)};
+    if(dx!==0)state.lastFacingX=dx;if(dy!==0)state.lastFacingY=dy;
+    if(dx===0 && dy===0 && !attack && !special && !dodge) return;
     state.onlineBusy=true;
-    try{await api('action',{room:state.room,id:state.playerId,dx,dy,move:attack?'attack':special?'special':''});}
+    const move=dodge?'dodge':attack?'attack':special?'special':'';
+    try{await api('action',{room:state.room,id:state.playerId,dx,dy,move,dodgeDx:dx||state.lastFacingX,dodgeDy:dy||state.lastFacingY});}
     finally{state.onlineBusy=false;}
   },100);
 }
@@ -94,9 +97,11 @@ function startPractice(){
 let raf=0,last=0;
 function beginLocal(){cancelAnimationFrame(raf);last=performance.now();const tick=now=>{const dt=Math.min((now-last)/16.67,2);last=now;if(state.screen!=='game'||!state.local)return;stepLocal(dt);drawArena();raf=requestAnimationFrame(tick)};raf=requestAnimationFrame(tick)}
 function renderGame(){app.innerHTML=`<main class="arena-page"><header class="arena-top"><div class="mark">SB<span>ONLINE</span></div><div class="timer" id="timer">03:00</div><div class="chip">ROOM ${esc(state.room||'LOCAL')}</div></header><div class="hud" id="hud"></div><canvas id="arena" width="960" height="540" aria-label="Battle arena"></canvas><div class="controls-help"><span>MOVE <b>WASD / ARROWS</b></span><span>JUMP <b>SPACE</b></span><span>ATTACK <b>J</b></span><span>SPECIAL <b>K</b></span><span>DODGE <b>SHIFT</b></span></div><div class="touch-controls"><div class="dpad"><button data-key="ArrowLeft">◀</button><button data-key="ArrowUp">▲</button><button data-key="ArrowDown">▼</button><button data-key="ArrowRight">▶</button></div><div class="touch-actions"><button data-key="Space">JUMP</button><button data-key="j">ATK</button><button data-key="k">SPECIAL</button><button data-key="Shift">DODGE</button></div></div><div class="game-footer"><span id="status">FIGHT!</span><button id="exitGame" class="secondary">EXIT MATCH</button></div></main>`;bindGame();drawArena()}
-function bindGame(){document.querySelector('#exitGame').onclick=()=>{state.local=false;cancelAnimationFrame(raf);clearInterval(state.polling);clearInterval(state.onlineInput);state.onlineInput=null;stopOnlineRender();state.screen='home';render()};document.querySelectorAll('[data-key]').forEach(b=>{const k=b.dataset.key;b.onpointerdown=e=>{e.preventDefault();state.keys[k]=true};b.onpointerup=b.onpointerleave=()=>state.keys[k]=false});}
+function bindGame(){document.querySelector('#exitGame').onclick=()=>{state.local=false;cancelAnimationFrame(raf);clearInterval(state.polling);clearInterval(state.onlineInput);state.onlineInput=null;stopOnlineRender();state.screen='home';render()};document.querySelectorAll('[data-key]').forEach(b=>{const k=b.dataset.key;const setPressed=value=>{state.keys[k]=value;state.keys[k.toLowerCase()]=value};b.onpointerdown=e=>{e.preventDefault();setPressed(true)};b.onpointerup=b.onpointerleave=b.onpointercancel=()=>setPressed(false)});}
+function clearPressedKeys(){for(const key of Object.keys(state.keys))state.keys[key]=false;}
 window.addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();state.keys[e.key===' '?'Space':e.key]=true;state.keys[e.key.toLowerCase()]=true});
 window.addEventListener('keyup',e=>{state.keys[e.key===' '?'Space':e.key]=false;state.keys[e.key.toLowerCase()]=false});
+window.addEventListener('blur',clearPressedKeys);document.addEventListener('visibilitychange',()=>{if(document.hidden)clearPressedKeys()});window.addEventListener('pointerup',()=>{for(const k of ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space','Shift','shift','j','k']){state.keys[k]=false;state.keys[k.toLowerCase()]=false}});
 function stepLocal(dt){
   const p=state.players[0],bot=state.players[1],k=state.keys,c=characters[p.character];
   if(k.a||k.ArrowLeft)p.vx-=.65*c.speed*dt;if(k.d||k.ArrowRight)p.vx+=.65*c.speed*dt;
