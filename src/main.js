@@ -120,16 +120,37 @@ function stepLocal(dt){
 }
 function drawArena(){
   const canvas=document.querySelector('#arena');if(!canvas)return;const ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
-  const g=ctx.createLinearGradient(0,0,0,h);g.addColorStop(0,'#142c60');g.addColorStop(.6,'#3159a0');g.addColorStop(1,'#121a39');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
-  ctx.fillStyle='#203c78';for(let i=0;i<14;i++){const x=i*78;ctx.fillRect(x,130+(i%3)*25,35,250);ctx.fillStyle='#31539a';ctx.fillRect(x+8,145+(i%3)*25,6,220);ctx.fillStyle='#203c78'}
-  for(let i=0;i<20;i++){ctx.fillStyle=i%2?'#ffce4e':'#64e8cf';ctx.fillRect(i*50,410,25,8)}
-  ctx.fillStyle='#10182e';ctx.fillRect(0,430,w,110);ctx.fillStyle='#3e6eaa';ctx.fillRect(0,420,w,12);ctx.fillStyle='#70e8d2';ctx.fillRect(0,420,w,3);
+  // Visual-only restyle: pastel shoujo fashion palette, sparkles, hearts, and a candy-city backdrop.
+  const g=ctx.createLinearGradient(0,0,0,h);g.addColorStop(0,'#fff1f8');g.addColorStop(.48,'#ffd6eb');g.addColorStop(1,'#ffe98a');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
+  // Soft sunset circles and decorative sparkles.
+  ctx.fillStyle='#fff9fd';ctx.beginPath();ctx.arc(790,95,58,0,Math.PI*2);ctx.fill();ctx.fillStyle='#ffe56f';ctx.beginPath();ctx.arc(790,95,43,0,Math.PI*2);ctx.fill();
+  for(let i=0;i<22;i++){const x=(i*83+27)%w,y=35+((i*47)%300),r=2+(i%3);ctx.fillStyle=i%2?'#fff':'#ff76b8';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();if(i%4===0){ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x-7,y);ctx.lineTo(x+7,y);ctx.moveTo(x,y-7);ctx.lineTo(x,y+7);ctx.stroke();}}
+  // Distant pastel city silhouettes.
+  for(let i=0;i<14;i++){const x=i*78-5,top=125+(i%4)*23;ctx.fillStyle=i%2?'#f4a9d0':'#dba8e7';ctx.fillRect(x,top,58,305);ctx.fillStyle='#fff0f8';for(let wy=top+15;wy<405;wy+=31)for(let wx=x+10;wx<x+52;wx+=20){ctx.fillRect(wx,wy,8,12);}}
+  // Heart and diamond details across the skyline.
+  for(let i=0;i<10;i++){const x=35+i*99,y=145+(i%3)*31;ctx.fillStyle=i%2?'#fff':'#ff6fb5';ctx.font='18px sans-serif';ctx.textAlign='center';ctx.fillText(i%2?'✦':'♡',x,y);}
+  // Platform remains in the same gameplay coordinates.
+  ctx.fillStyle='#fff5fb';ctx.fillRect(0,430,w,110);ctx.fillStyle='#21151f';ctx.fillRect(0,420,w,12);ctx.fillStyle='#ff6fb5';ctx.fillRect(0,420,w,5);ctx.fillStyle='#ffe66d';ctx.fillRect(0,425,w,5);
+  for(let i=0;i<20;i++){ctx.fillStyle=i%2?'#ff6fb5':'#fff';ctx.fillRect(i*50,444,25,8);ctx.fillStyle='#e8a3cb';ctx.fillRect(i*50+25,444,25,8);}
   const ps=state.players||[];const emojis={Sonic:'🦔',Amy:'🔨',Rouge:'🦇',Shadow:'⚡',Cream:'🐰'};
   ps.forEach((p,i)=>{
     const targetX=p.x??(120+i*120),targetY=p.y??270;
     let x=targetX,y=targetY;
     if(!state.local){const v=state.visualPositions[p.id]||(state.visualPositions[p.id]={x:targetX,y:targetY});v.x+=(targetX-v.x)*.24;v.y+=(targetY-v.y)*.24;x=v.x;y=v.y;}
-    ctx.save();ctx.translate(x,y);ctx.fillStyle=characters[p.character]?.color||'#fff';ctx.fillRect(-18,-38,36,38);ctx.fillStyle='#10182e';ctx.fillRect(-14,-31,9,6);ctx.fillRect(5,-31,9,6);ctx.fillStyle='#fff';ctx.fillRect(-12,-30,4,3);ctx.fillRect(7,-30,4,3);ctx.fillStyle='#d5eaff';ctx.fillRect(-23,-5,46,6);ctx.fillStyle='#ffe06a';ctx.fillRect(-23,-5,46*Math.max(0,p.lives/3),6);ctx.font='bold 12px monospace';ctx.textAlign='center';ctx.fillStyle='#fff';ctx.fillText(p.name||p.character,0,-49);ctx.restore()});
+    ctx.save();ctx.translate(x,y);
+    const color=characters[p.character]?.color||'#fff';
+    // Bold sticker-like character silhouettes with a glossy highlight.
+    ctx.fillStyle='#21151f';ctx.beginPath();ctx.roundRect(-22,-43,44,47,10);ctx.fill();
+    ctx.fillStyle=color;ctx.beginPath();ctx.roundRect(-18,-39,36,38,8);ctx.fill();
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.ellipse(-5,-32,7,3,-.25,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#21151f';ctx.beginPath();ctx.ellipse(-8,-27,4,6,0,0,Math.PI*2);ctx.ellipse(8,-27,4,6,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-9,-29,1.5,0,Math.PI*2);ctx.arc(7,-29,1.5,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#21151f';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(-9,-13);ctx.quadraticCurveTo(0,-7,9,-13);ctx.stroke();
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.roundRect(-24,-5,48,8,4);ctx.fill();ctx.strokeStyle='#21151f';ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle='#ff6fb5';ctx.beginPath();ctx.roundRect(-22,-4,44*Math.max(0,p.lives/3),6,3);ctx.fill();
+    ctx.font='900 13px Nunito, sans-serif';ctx.textAlign='center';ctx.lineWidth=4;ctx.strokeStyle='#fff';ctx.strokeText(p.name||p.character,0,-52);ctx.fillStyle='#21151f';ctx.fillText(p.name||p.character,0,-52);
+    ctx.restore();
+  });
   const hud=document.querySelector('#hud');if(hud)hud.innerHTML=ps.map(p=>`<div class="hud-card"><b>${esc(p.character)}</b><span>${'♥ '.repeat(Math.max(0,p.lives??3))}</span><small>${esc(p.name)}</small></div>`).join('');
 }
 function toast(msg){let t=document.querySelector('.toast');if(!t){t=document.createElement('div');t.className='toast';document.body.append(t)}t.textContent=msg;setTimeout(()=>t.remove(),4000)}
