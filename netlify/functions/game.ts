@@ -22,7 +22,10 @@ export default async (req:Request) => {
     if(!/^[A-Z0-9]{4,8}$/.test(roomCode))return json({error:"Enter a valid room code."},400);
     const room=await store.get(roomCode,{type:"json"}) as Room|null;
     if(!room)return json({error:"Room not found. Check the code and try again."},404);
-    if(action==="state")return json({room});
+    if(action==="state"){
+      if(room.game.status==="playing" && room.game.endsAt && Date.now()>=room.game.endsAt){finish(room);room.updatedAt=Date.now();await store.setJSON(roomCode,room);}
+      return json({room});
+    }
     if(action==="join"){
       if(!id)return json({error:"Player ID required."},400);
       if(!room.players.some(p=>p.id===id)){
@@ -40,7 +43,7 @@ export default async (req:Request) => {
     } else if(action==="action"){
       if(room.game.status!=="playing")return json({error:"The match is not running."},409);
       const p=room.players.find(p=>p.id===id);if(!p)return json({error:"Player not found."},403);
-      const now=Date.now();if(now>(room.game.endsAt||0))finish(room);
+      const now=Date.now();if(now>=(room.game.endsAt||0)){finish(room);room.updatedAt=Date.now();await store.setJSON(roomCode,room);return json({room});}
       const move=String(input.move||"");const dx=Math.max(-1,Math.min(1,Number(input.dx)||0));const dy=Math.max(-1,Math.min(1,Number(input.dy)||0));
       p.x=Math.max(20,Math.min(940,p.x+dx*12));p.y=Math.max(180,Math.min(390,p.y+dy*9));
       if(move==="attack"||move==="special"){
