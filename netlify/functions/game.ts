@@ -1,6 +1,6 @@
 import { getStore } from "@netlify/blobs";
 
-type Player = { id:string; name:string; character:string; ready:boolean; lives:number; x:number; y:number; score:number; joinedAt:number };
+type Player = { id:string; name:string; character:string; ready:boolean; lives:number; x:number; y:number; score:number; joinedAt:number; dodgeUntil?:number };
 type Game = { status:"lobby"|"playing"|"finished"; startedAt:number|null; endsAt:number|null; winner:string|null; knockouts:Record<string,number> };
 type Room = { code:string; hostId:string; players:Player[]; game:Game; updatedAt:number };
 const chars = new Set(["Sonic","Amy","Rouge","Shadow","Cream"]);
@@ -46,9 +46,13 @@ export default async (req:Request) => {
       const now=Date.now();if(now>=(room.game.endsAt||0)){finish(room);room.updatedAt=Date.now();await store.setJSON(roomCode,room);return json({room});}
       const move=String(input.move||"");const dx=Math.max(-1,Math.min(1,Number(input.dx)||0));const dy=Math.max(-1,Math.min(1,Number(input.dy)||0));
       p.x=Math.max(20,Math.min(940,p.x+dx*12));p.y=Math.max(180,Math.min(390,p.y+dy*9));
+      if(move==="dodge"){
+        const dodgeDx=Math.max(-1,Math.min(1,Number(input.dodgeDx)||0));const dodgeDy=Math.max(-1,Math.min(1,Number(input.dodgeDy)||0));
+        p.x=Math.max(20,Math.min(940,p.x+dodgeDx*55));p.y=Math.max(180,Math.min(390,p.y+dodgeDy*28));p.dodgeUntil=now+320;
+      }
       if(move==="attack"||move==="special"){
-        const range=move==="special"?150:85;const target=room.players.filter(q=>q.id!==id&&q.lives>0).sort((a,b)=>Math.hypot(a.x-p.x,a.y-p.y)-Math.hypot(b.x-p.x,b.y-p.y))[0];
-        if(target&&Math.hypot(target.x-p.x,target.y-p.y)<range){target.lives--;target.x=Math.max(20,Math.min(940,target.x+(target.x>=p.x?70:-70)));if(target.lives<=0){room.game.knockouts[id]=(room.game.knockouts[id]||0)+1;p.score++;}}
+        const range=move==="special"?150:85;const target=room.players.filter(q=>q.id!==id&&q.lives>0&&(q.dodgeUntil||0)<=now).sort((a,b)=>Math.hypot(a.x-p.x,a.y-p.y)-Math.hypot(b.x-p.x,b.y-p.y))[0];
+        if(target&&Math.hypot(target.x-p.x,target.y-p.y)<range){target.lives--;target.x=Math.max(20,Math.min(940,target.x+(target.x>=p.x?40:-40)));if(target.lives<=0){room.game.knockouts[id]=(room.game.knockouts[id]||0)+1;p.score++;}}
       }
       const alive=room.players.filter(q=>q.lives>0);if(alive.length<=1)finish(room);
     } else return json({error:"Unknown action."},400);
