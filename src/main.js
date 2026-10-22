@@ -7,7 +7,7 @@ const characters = {
   Shadow: { color:'#ed334c', tagline:'CHAOS • Precision', special:'Chaos Control', speed:1.04, power:1.12, move:'Brief burst of speed and powerful strike' },
   Cream: { color:'#ffc86d', tagline:'TECHNIQUE • Teamwork', special:'Cheese Assist', speed:1, power:.92, move:'Cheese rushes forward for a ranged hit' }
 };
-const state = { screen:'home', room:null, playerId:crypto.randomUUID(), name:'Player', character:'Sonic', players:[], game:null, keys:{}, lastAction:0, polling:null, onlineInput:null, onlineBusy:false, previousOnlineKeys:{}, onlineRaf:0, visualPositions:{}, local:false, lastFacingX:1, lastFacingY:0 };
+const state = { screen:'home', room:null, playerId:crypto.randomUUID(), name:'Player', character:'Sonic', players:[], game:null, keys:{}, lastAction:0, polling:null, onlineInput:null, onlineBusy:false, previousOnlineKeys:{}, onlineRaf:0, visualPositions:{}, local:false };
 const app = document.querySelector('#app');
 const esc = s => String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function render(){
@@ -73,13 +73,10 @@ function startOnlineInput(){
     const dy=(k.s||k.S||k.ArrowDown?1:0)-(k.w||k.W||k.ArrowUp?1:0);
     const attack=(k.j||k.J)&&!state.previousOnlineKeys.attack;
     const special=(k.k||k.K)&&!state.previousOnlineKeys.special;
-    const dodge=(k.shift||k.Shift)&&!state.previousOnlineKeys.dodge;
-    state.previousOnlineKeys={attack:!!(k.j||k.J),special:!!(k.k||k.K),dodge:!!(k.shift||k.Shift)};
-    if(dx!==0)state.lastFacingX=dx;if(dy!==0)state.lastFacingY=dy;
-    if(dx===0 && dy===0 && !attack && !special && !dodge) return;
+    state.previousOnlineKeys={attack:!!(k.j||k.J),special:!!(k.k||k.K)};
+    if(dx===0 && dy===0 && !attack && !special) return;
     state.onlineBusy=true;
-    const move=dodge?'dodge':attack?'attack':special?'special':'';
-    try{await api('action',{room:state.room,id:state.playerId,dx,dy,move,dodgeDx:dx||state.lastFacingX,dodgeDy:dy||state.lastFacingY});}
+    try{await api('action',{room:state.room,id:state.playerId,dx,dy,move:attack?'attack':special?'special':''});}
     finally{state.onlineBusy=false;}
   },100);
 }
@@ -97,11 +94,9 @@ function startPractice(){
 let raf=0,last=0;
 function beginLocal(){cancelAnimationFrame(raf);last=performance.now();const tick=now=>{const dt=Math.min((now-last)/16.67,2);last=now;if(state.screen!=='game'||!state.local)return;stepLocal(dt);drawArena();raf=requestAnimationFrame(tick)};raf=requestAnimationFrame(tick)}
 function renderGame(){app.innerHTML=`<main class="arena-page"><header class="arena-top"><div class="mark">SB<span>ONLINE</span></div><div class="timer" id="timer">03:00</div><div class="chip">ROOM ${esc(state.room||'LOCAL')}</div></header><div class="hud" id="hud"></div><canvas id="arena" width="960" height="540" aria-label="Battle arena"></canvas><div class="controls-help"><span>MOVE <b>WASD / ARROWS</b></span><span>JUMP <b>SPACE</b></span><span>ATTACK <b>J</b></span><span>SPECIAL <b>K</b></span><span>DODGE <b>SHIFT</b></span></div><div class="touch-controls"><div class="dpad"><button data-key="ArrowLeft">◀</button><button data-key="ArrowUp">▲</button><button data-key="ArrowDown">▼</button><button data-key="ArrowRight">▶</button></div><div class="touch-actions"><button data-key="Space">JUMP</button><button data-key="j">ATK</button><button data-key="k">SPECIAL</button><button data-key="Shift">DODGE</button></div></div><div class="game-footer"><span id="status">FIGHT!</span><button id="exitGame" class="secondary">EXIT MATCH</button></div></main>`;bindGame();drawArena()}
-function bindGame(){document.querySelector('#exitGame').onclick=()=>{state.local=false;cancelAnimationFrame(raf);clearInterval(state.polling);clearInterval(state.onlineInput);state.onlineInput=null;stopOnlineRender();state.screen='home';render()};document.querySelectorAll('[data-key]').forEach(b=>{const k=b.dataset.key;const setPressed=value=>{state.keys[k]=value;state.keys[k.toLowerCase()]=value};b.onpointerdown=e=>{e.preventDefault();setPressed(true)};b.onpointerup=b.onpointerleave=b.onpointercancel=()=>setPressed(false)});}
-function clearPressedKeys(){for(const key of Object.keys(state.keys))state.keys[key]=false;}
+function bindGame(){document.querySelector('#exitGame').onclick=()=>{state.local=false;cancelAnimationFrame(raf);clearInterval(state.polling);clearInterval(state.onlineInput);state.onlineInput=null;stopOnlineRender();state.screen='home';render()};document.querySelectorAll('[data-key]').forEach(b=>{const k=b.dataset.key;b.onpointerdown=e=>{e.preventDefault();state.keys[k]=true};b.onpointerup=b.onpointerleave=()=>state.keys[k]=false});}
 window.addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();state.keys[e.key===' '?'Space':e.key]=true;state.keys[e.key.toLowerCase()]=true});
 window.addEventListener('keyup',e=>{state.keys[e.key===' '?'Space':e.key]=false;state.keys[e.key.toLowerCase()]=false});
-window.addEventListener('blur',clearPressedKeys);document.addEventListener('visibilitychange',()=>{if(document.hidden)clearPressedKeys()});window.addEventListener('pointerup',()=>{for(const k of ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space','Shift','shift','j','k']){state.keys[k]=false;state.keys[k.toLowerCase()]=false}});
 function stepLocal(dt){
   const p=state.players[0],bot=state.players[1],k=state.keys,c=characters[p.character];
   if(k.a||k.ArrowLeft)p.vx-=.65*c.speed*dt;if(k.d||k.ArrowRight)p.vx+=.65*c.speed*dt;
@@ -125,37 +120,16 @@ function stepLocal(dt){
 }
 function drawArena(){
   const canvas=document.querySelector('#arena');if(!canvas)return;const ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
-  // Visual-only restyle: pastel shoujo fashion palette, sparkles, hearts, and a candy-city backdrop.
-  const g=ctx.createLinearGradient(0,0,0,h);g.addColorStop(0,'#fff1f8');g.addColorStop(.48,'#ffd6eb');g.addColorStop(1,'#ffe98a');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
-  // Soft sunset circles and decorative sparkles.
-  ctx.fillStyle='#fff9fd';ctx.beginPath();ctx.arc(790,95,58,0,Math.PI*2);ctx.fill();ctx.fillStyle='#ffe56f';ctx.beginPath();ctx.arc(790,95,43,0,Math.PI*2);ctx.fill();
-  for(let i=0;i<22;i++){const x=(i*83+27)%w,y=35+((i*47)%300),r=2+(i%3);ctx.fillStyle=i%2?'#fff':'#ff76b8';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();if(i%4===0){ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x-7,y);ctx.lineTo(x+7,y);ctx.moveTo(x,y-7);ctx.lineTo(x,y+7);ctx.stroke();}}
-  // Distant pastel city silhouettes.
-  for(let i=0;i<14;i++){const x=i*78-5,top=125+(i%4)*23;ctx.fillStyle=i%2?'#f4a9d0':'#dba8e7';ctx.fillRect(x,top,58,305);ctx.fillStyle='#fff0f8';for(let wy=top+15;wy<405;wy+=31)for(let wx=x+10;wx<x+52;wx+=20){ctx.fillRect(wx,wy,8,12);}}
-  // Heart and diamond details across the skyline.
-  for(let i=0;i<10;i++){const x=35+i*99,y=145+(i%3)*31;ctx.fillStyle=i%2?'#fff':'#ff6fb5';ctx.font='18px sans-serif';ctx.textAlign='center';ctx.fillText(i%2?'✦':'♡',x,y);}
-  // Platform remains in the same gameplay coordinates.
-  ctx.fillStyle='#fff5fb';ctx.fillRect(0,430,w,110);ctx.fillStyle='#21151f';ctx.fillRect(0,420,w,12);ctx.fillStyle='#ff6fb5';ctx.fillRect(0,420,w,5);ctx.fillStyle='#ffe66d';ctx.fillRect(0,425,w,5);
-  for(let i=0;i<20;i++){ctx.fillStyle=i%2?'#ff6fb5':'#fff';ctx.fillRect(i*50,444,25,8);ctx.fillStyle='#e8a3cb';ctx.fillRect(i*50+25,444,25,8);}
+  const g=ctx.createLinearGradient(0,0,0,h);g.addColorStop(0,'#142c60');g.addColorStop(.6,'#3159a0');g.addColorStop(1,'#121a39');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
+  ctx.fillStyle='#203c78';for(let i=0;i<14;i++){const x=i*78;ctx.fillRect(x,130+(i%3)*25,35,250);ctx.fillStyle='#31539a';ctx.fillRect(x+8,145+(i%3)*25,6,220);ctx.fillStyle='#203c78'}
+  for(let i=0;i<20;i++){ctx.fillStyle=i%2?'#ffce4e':'#64e8cf';ctx.fillRect(i*50,410,25,8)}
+  ctx.fillStyle='#10182e';ctx.fillRect(0,430,w,110);ctx.fillStyle='#3e6eaa';ctx.fillRect(0,420,w,12);ctx.fillStyle='#70e8d2';ctx.fillRect(0,420,w,3);
   const ps=state.players||[];const emojis={Sonic:'🦔',Amy:'🔨',Rouge:'🦇',Shadow:'⚡',Cream:'🐰'};
   ps.forEach((p,i)=>{
     const targetX=p.x??(120+i*120),targetY=p.y??270;
     let x=targetX,y=targetY;
     if(!state.local){const v=state.visualPositions[p.id]||(state.visualPositions[p.id]={x:targetX,y:targetY});v.x+=(targetX-v.x)*.24;v.y+=(targetY-v.y)*.24;x=v.x;y=v.y;}
-    ctx.save();ctx.translate(x,y);
-    const color=characters[p.character]?.color||'#fff';
-    // Bold sticker-like character silhouettes with a glossy highlight.
-    ctx.fillStyle='#21151f';ctx.beginPath();ctx.roundRect(-22,-43,44,47,10);ctx.fill();
-    ctx.fillStyle=color;ctx.beginPath();ctx.roundRect(-18,-39,36,38,8);ctx.fill();
-    ctx.fillStyle='#fff';ctx.beginPath();ctx.ellipse(-5,-32,7,3,-.25,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='#21151f';ctx.beginPath();ctx.ellipse(-8,-27,4,6,0,0,Math.PI*2);ctx.ellipse(8,-27,4,6,0,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-9,-29,1.5,0,Math.PI*2);ctx.arc(7,-29,1.5,0,Math.PI*2);ctx.fill();
-    ctx.strokeStyle='#21151f';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(-9,-13);ctx.quadraticCurveTo(0,-7,9,-13);ctx.stroke();
-    ctx.fillStyle='#fff';ctx.beginPath();ctx.roundRect(-24,-5,48,8,4);ctx.fill();ctx.strokeStyle='#21151f';ctx.lineWidth=2;ctx.stroke();
-    ctx.fillStyle='#ff6fb5';ctx.beginPath();ctx.roundRect(-22,-4,44*Math.max(0,p.lives/3),6,3);ctx.fill();
-    ctx.font='900 13px Nunito, sans-serif';ctx.textAlign='center';ctx.lineWidth=4;ctx.strokeStyle='#fff';ctx.strokeText(p.name||p.character,0,-52);ctx.fillStyle='#21151f';ctx.fillText(p.name||p.character,0,-52);
-    ctx.restore();
-  });
+    ctx.save();ctx.translate(x,y);ctx.fillStyle=characters[p.character]?.color||'#fff';ctx.fillRect(-18,-38,36,38);ctx.fillStyle='#10182e';ctx.fillRect(-14,-31,9,6);ctx.fillRect(5,-31,9,6);ctx.fillStyle='#fff';ctx.fillRect(-12,-30,4,3);ctx.fillRect(7,-30,4,3);ctx.fillStyle='#d5eaff';ctx.fillRect(-23,-5,46,6);ctx.fillStyle='#ffe06a';ctx.fillRect(-23,-5,46*Math.max(0,p.lives/3),6);ctx.font='bold 12px monospace';ctx.textAlign='center';ctx.fillStyle='#fff';ctx.fillText(p.name||p.character,0,-49);ctx.restore()});
   const hud=document.querySelector('#hud');if(hud)hud.innerHTML=ps.map(p=>`<div class="hud-card"><b>${esc(p.character)}</b><span>${'♥ '.repeat(Math.max(0,p.lives??3))}</span><small>${esc(p.name)}</small></div>`).join('');
 }
 function toast(msg){let t=document.querySelector('.toast');if(!t){t=document.createElement('div');t.className='toast';document.body.append(t)}t.textContent=msg;setTimeout(()=>t.remove(),4000)}
