@@ -7,7 +7,7 @@ const characters = {
   Shadow: { color:'#ed334c', tagline:'CHAOS • Precision', special:'Chaos Control', speed:1.04, power:1.12, move:'Brief burst of speed and powerful strike' },
   Cream: { color:'#ffc86d', tagline:'TECHNIQUE • Teamwork', special:'Cheese Assist', speed:1, power:.92, move:'Cheese rushes forward for a ranged hit' }
 };
-const state = { screen:'home', room:null, playerId:crypto.randomUUID(), name:'Player', character:'Sonic', players:[], game:null, keys:{}, lastAction:0, polling:null, local:false };
+const state = { screen:'home', room:null, playerId:crypto.randomUUID(), name:'Player', character:'Sonic', players:[], game:null, keys:{}, lastAction:0, polling:null, onlineInput:null, onlineBusy:false, previousOnlineKeys:{}, local:false };
 const app = document.querySelector('#app');
 const esc = s => String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function render(){
@@ -42,10 +42,34 @@ async function api(action,data={}){
     const out=await r.json(); if(!r.ok) throw new Error(out.error||'Network error');
     if(out.room){state.room=out.room.code;state.players=out.room.players||[];state.game=out.room.game||null; if(state.game?.status==='playing')state.screen='game';else if(state.game?.status==='finished'){state.winner=state.game.winner;state.screen='result'}else state.screen='lobby';}
     if(action==='create'||action==='join'){clearInterval(state.polling);state.polling=setInterval(()=>api('state',{room:state.room,id:state.playerId}),700);}
-    if(action==='state' && state.screen==='game') drawArena();
-    if(action==='state' && state.game?.status==='finished'){state.winner=state.game.winner;state.screen='result';clearInterval(state.polling);render();return}
+    if(!state.local && state.screen==='game') startOnlineInput();
+    if(action==='state' && state.screen==='game') { updateOnlineTimer(); drawArena(); return; }
+    if(action==='action' && state.screen==='game') { drawArena(); return; }
+    if(state.screen==='result'){clearInterval(state.polling);clearInterval(state.onlineInput);state.onlineInput=null;}
     render();
   }catch(e){toast(e.message+' — use Practice Mode to test locally, or deploy the Netlify project for online rooms.')}
+}
+function startOnlineInput(){
+  if(state.local || state.onlineInput) return;
+  state.previousOnlineKeys={};
+  state.onlineInput=setInterval(async()=>{
+    if(state.local || state.screen!=='game' || !state.room || state.onlineBusy) return;
+    const k=state.keys, dx=(k.d||k.D||k.ArrowRight?1:0)-(k.a||k.A||k.ArrowLeft?1:0);
+    const dy=(k.s||k.S||k.ArrowDown?1:0)-(k.w||k.W||k.ArrowUp?1:0);
+    const attack=(k.j||k.J)&&!state.previousOnlineKeys.attack;
+    const special=(k.k||k.K)&&!state.previousOnlineKeys.special;
+    state.previousOnlineKeys={attack:!!(k.j||k.J),special:!!(k.k||k.K)};
+    if(dx===0 && dy===0 && !attack && !special) return;
+    state.onlineBusy=true;
+    try{await api('action',{room:state.room,id:state.playerId,dx,dy,move:attack?'attack':special?'special':''});}
+    finally{state.onlineBusy=false;}
+  },100);
+}
+function updateOnlineTimer(){
+  const timer=document.querySelector('#timer');
+  if(!timer || !state.game) return;
+  const end=state.game.endsAt;
+  if(end){const seconds=Math.max(0,Math.ceil((end-Date.now())/1000));timer.textContent=`${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;}
 }
 function startPractice(){
   state.local=true;state.room='LOCAL';state.screen='game';
@@ -55,7 +79,7 @@ function startPractice(){
 let raf=0,last=0;
 function beginLocal(){cancelAnimationFrame(raf);last=performance.now();const tick=now=>{const dt=Math.min((now-last)/16.67,2);last=now;if(state.screen!=='game'||!state.local)return;stepLocal(dt);drawArena();raf=requestAnimationFrame(tick)};raf=requestAnimationFrame(tick)}
 function renderGame(){app.innerHTML=`<main class="arena-page"><header class="arena-top"><div class="mark">SB<span>ONLINE</span></div><div class="timer" id="timer">03:00</div><div class="chip">ROOM ${esc(state.room||'LOCAL')}</div></header><div class="hud" id="hud"></div><canvas id="arena" width="960" height="540" aria-label="Battle arena"></canvas><div class="controls-help"><span>MOVE <b>WASD / ARROWS</b></span><span>JUMP <b>SPACE</b></span><span>ATTACK <b>J</b></span><span>SPECIAL <b>K</b></span><span>DODGE <b>SHIFT</b></span></div><div class="touch-controls"><div class="dpad"><button data-key="ArrowLeft">◀</button><button data-key="ArrowUp">▲</button><button data-key="ArrowDown">▼</button><button data-key="ArrowRight">▶</button></div><div class="touch-actions"><button data-key="Space">JUMP</button><button data-key="j">ATK</button><button data-key="k">SPECIAL</button><button data-key="Shift">DODGE</button></div></div><div class="game-footer"><span id="status">FIGHT!</span><button id="exitGame" class="secondary">EXIT MATCH</button></div></main>`;bindGame();drawArena()}
-function bindGame(){document.querySelector('#exitGame').onclick=()=>{state.local=false;cancelAnimationFrame(raf);state.screen='home';render()};document.querySelectorAll('[data-key]').forEach(b=>{const k=b.dataset.key;b.onpointerdown=e=>{e.preventDefault();state.keys[k]=true};b.onpointerup=b.onpointerleave=()=>state.keys[k]=false});}
+function bindGame(){document.querySelector('#exitGame').onclick=()=>{state.local=false;cancelAnimationFrame(raf);clearInterval(state.polling);clearInterval(state.onlineInput);state.onlineInput=null;state.screen='home';render()};document.querySelectorAll('[data-key]').forEach(b=>{const k=b.dataset.key;b.onpointerdown=e=>{e.preventDefault();state.keys[k]=true};b.onpointerup=b.onpointerleave=()=>state.keys[k]=false});}
 window.addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();state.keys[e.key===' '?'Space':e.key]=true;state.keys[e.key.toLowerCase()]=true});
 window.addEventListener('keyup',e=>{state.keys[e.key===' '?'Space':e.key]=false;state.keys[e.key.toLowerCase()]=false});
 function stepLocal(dt){
